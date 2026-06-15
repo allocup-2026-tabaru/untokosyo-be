@@ -7,6 +7,7 @@ import (
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/ws"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
 func main() {
@@ -19,6 +20,7 @@ func main() {
 	go hub.Run()
 
 	r := chi.NewRouter()
+	r.Use(cors.AllowAll().Handler)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
