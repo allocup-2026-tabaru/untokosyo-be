@@ -96,7 +96,7 @@ func (h *RoomHub) NotifyPlayerJoined(playerID, name string) {
 		Type:    EventTypePlayerJoined,
 		Payload: PlayerJoinedPayload{PlayerID: playerID, Name: name},
 	})
-	h.sendToHost(msg)
+	h.BroadcastToHost(msg)
 }
 
 // BroadcastGameStart はゲーム開始をホスト・全プレイヤーへ送信する。
@@ -160,7 +160,7 @@ func (h *RoomHub) handleTick(result domain.TickResult) {
 			ExtractionProbability: result.Turnip.ExtractionProbability,
 		},
 	})
-	h.sendToHost(turnipMsg)
+	h.BroadcastToHost(turnipMsg)
 
 	// ホストへ各プレイヤーの player_update 送信
 	for _, snap := range result.Players {
@@ -172,7 +172,7 @@ func (h *RoomHub) handleTick(result domain.TickResult) {
 				Status:    string(snap.Status),
 			},
 		})
-		h.sendToHost(msg)
+		h.BroadcastToHost(msg)
 	}
 
 	// 各プレイヤーへ自分の player_update 送信
@@ -185,7 +185,7 @@ func (h *RoomHub) handleTick(result domain.TickResult) {
 				Status:    string(snap.Status),
 			},
 		})
-		h.sendToPlayer(playerID, msg)
+		h.SendToPlayer(playerID, msg)
 	}
 
 	if result.Extracted {
@@ -200,14 +200,14 @@ func (h *RoomHub) handleTick(result domain.TickResult) {
 			Type:    EventTypeExtracted,
 			Payload: ExtractedPayload{EliminatedPlayerIDs: eliminatedIDs},
 		})
-		h.sendToHost(extractedMsg)
+		h.BroadcastToHost(extractedMsg)
 
 		eliminatedMsg := h.marshal(OutgoingMessage{
 			Type:    EventTypeEliminated,
 			Payload: EliminatedPayload{},
 		})
 		for _, id := range eliminatedIDs {
-			h.sendToPlayer(id, eliminatedMsg)
+			h.SendToPlayer(id, eliminatedMsg)
 		}
 	}
 
@@ -229,7 +229,7 @@ func (h *RoomHub) handleTick(result domain.TickResult) {
 				Standings:      standings,
 			},
 		})
-		h.sendToHost(hostFinishedMsg)
+		h.BroadcastToHost(hostFinishedMsg)
 
 		rankMap := make(map[string]int, len(standings))
 		for _, s := range standings {
@@ -244,7 +244,7 @@ func (h *RoomHub) handleTick(result domain.TickResult) {
 					MyPullAccumulation: snap.PullAccumulation,
 				},
 			})
-			h.sendToPlayer(snap.ID, msg)
+			h.SendToPlayer(snap.ID, msg)
 		}
 	}
 }
@@ -263,7 +263,8 @@ func (h *RoomHub) handleGameEvent(evt gameEvent) {
 	}
 }
 
-func (h *RoomHub) sendToHost(msg []byte) {
+// BroadcastToHost はホストクライアントへメッセージを送信する。
+func (h *RoomHub) BroadcastToHost(msg []byte) {
 	h.mu.RLock()
 	host := h.host
 	h.mu.RUnlock()
@@ -272,7 +273,8 @@ func (h *RoomHub) sendToHost(msg []byte) {
 	}
 }
 
-func (h *RoomHub) sendToPlayer(playerID string, msg []byte) {
+// SendToPlayer は指定プレイヤーへメッセージを送信する。
+func (h *RoomHub) SendToPlayer(playerID string, msg []byte) {
 	h.mu.RLock()
 	client := h.players[playerID]
 	h.mu.RUnlock()
