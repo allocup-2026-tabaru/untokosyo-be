@@ -16,8 +16,11 @@ func main() {
 		port = "8080"
 	}
 
-	hub := ws.NewHub()
-	go hub.Run()
+	_ = ws.NewHubManager()
+
+	// サンプル: カウンターブロードキャスト用 Hub
+	sampleHub := ws.NewHub()
+	go sampleHub.Run()
 
 	r := chi.NewRouter()
 	r.Use(cors.AllowAll().Handler)
@@ -28,8 +31,9 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
+	// サンプル: カウンターブロードキャストの動作確認エンドポイント
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
-		ws.ServeWS(hub, w, r)
+		ws.ServeWS(sampleHub, w, r)
 	})
 
 	http.ListenAndServe(":"+port, r)

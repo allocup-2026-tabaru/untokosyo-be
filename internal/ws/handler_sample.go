@@ -1,3 +1,5 @@
+// サンプルコード: Hub と Client を使ったシンプルな read/write ポンプの実装例。
+// ゲーム本体には使用しない。
 package ws
 
 import (
