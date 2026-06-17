@@ -16,8 +16,7 @@ func main() {
 		port = "8080"
 	}
 
-	hub := ws.NewHub()
-	go hub.Run()
+	_ = ws.NewHubManager()
 
 	r := chi.NewRouter()
 	r.Use(cors.AllowAll().Handler)
@@ -26,10 +25,6 @@ func main() {
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
-	})
-
-	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
-		ws.ServeWS(hub, w, r)
 	})
 
 	http.ListenAndServe(":"+port, r)
