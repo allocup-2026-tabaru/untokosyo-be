@@ -18,6 +18,10 @@ func main() {
 
 	_ = ws.NewHubManager()
 
+	// サンプル: カウンターブロードキャスト用 Hub
+	sampleHub := ws.NewHub()
+	go sampleHub.Run()
+
 	r := chi.NewRouter()
 	r.Use(cors.AllowAll().Handler)
 	r.Use(middleware.Logger)
@@ -25,6 +29,11 @@ func main() {
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
+	})
+
+	// サンプル: カウンターブロードキャストの動作確認エンドポイント
+	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
+		ws.ServeWS(sampleHub, w, r)
 	})
 
 	http.ListenAndServe(":"+port, r)
