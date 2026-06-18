@@ -10,12 +10,13 @@ import (
 )
 
 type Handler struct {
-	store   store.RoomStore
-	manager *HubManager
+	store     store.RoomStore
+	manager   *HubManager
+	jwtSecret string
 }
 
-func NewHandler(s store.RoomStore, manager *HubManager) *Handler {
-	return &Handler{store: s, manager: manager}
+func NewHandler(s store.RoomStore, manager *HubManager, jwtSecret string) *Handler {
+	return &Handler{store: s, manager: manager, jwtSecret: jwtSecret}
 }
 
 func (h *Handler) ServeHostWS(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +34,7 @@ func (h *Handler) ServeHostWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := NewHostClient(conn, hub)
+	client := NewHostClient(conn, hub, roomID, room.HostPlayerID, h.jwtSecret)
 
 	players := make([]PlayerSnapshot, 0, len(room.Players))
 	for _, p := range room.Players {
@@ -92,7 +93,7 @@ func (h *Handler) ServePlayerWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := NewPlayerClient(conn, hub, playerID)
+	client := NewPlayerClient(conn, hub, playerID, roomID, h.jwtSecret)
 
 	snapshot, _ := json.Marshal(OutgoingMessage{
 		Type: EventTypeRoomState,

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"os"
 
@@ -20,17 +21,22 @@ func main() {
 		port = "8080"
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET is required")
+	}
+
 	ctx := context.Background()
 
 	roomStore := store.NewMemoryRoomStore()
 	manager := ws.NewHubManager()
-	wsHandler := ws.NewHandler(roomStore, manager)
+	wsHandler := ws.NewHandler(roomStore, manager, jwtSecret)
 
 	judge := domain.NewExtractionJudge(domain.JudgeConfig{
 		Type:   domain.JudgeTypeSigmoid,
 		Params: map[string]float64{"midpoint": 100.0, "steepness": 0.05},
 	})
-	roomHandler := api.NewRoomHandler(ctx, roomStore, manager, judge)
+	roomHandler := api.NewRoomHandler(ctx, roomStore, manager, judge, jwtSecret)
 
 	// サンプル: カウンターブロードキャスト用 Hub
 	sampleHub := ws.NewHub()

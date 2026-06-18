@@ -5,6 +5,7 @@ type EventType string
 
 const (
 	// クライアント → サーバー
+	EventTypeAuth    EventType = "auth"
 	EventTypePull    EventType = "pull"
 	EventTypeRelease EventType = "release"
 	EventTypePong    EventType = "pong"
@@ -27,6 +28,12 @@ const (
 )
 
 // ─── クライアント → サーバー ────────────────────────────────────────────────
+
+// AuthMessage はWS接続後に最初に送るべき認証メッセージ。
+type AuthMessage struct {
+	Type  EventType `json:"type"`
+	Token string    `json:"token"`
+}
 
 // IncomingMessage はコントローラー画面からサーバーへ届くメッセージの共通型。
 // Type で pull / release / pong を判別する。

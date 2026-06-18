@@ -4,7 +4,14 @@ export
 REGISTRY := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT_ID)/untokosyo-be
 IMAGE    := $(REGISTRY)/server
 
-.PHONY: up down logs build push deploy-vm deploy
+.PHONY: up down logs build push deploy-vm deploy gen-secret
+
+# ── セットアップ ──────────────────────────────────────────────
+gen-secret:
+	@SECRET=$$(openssl rand -hex 32) && \
+	if [ ! -f .env ]; then cp .env.template .env; fi && \
+	sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$$SECRET/" .env && \
+	echo "JWT_SECRET を .env に書き込みました"
 
 # ── 開発 ────────────────────────────────────────────────────
 up:
