@@ -131,7 +131,7 @@ func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if hub, ok := h.manager.GetHub(roomID); ok {
-		hub.NotifyPlayerJoined(playerID, req.Name, req.AvatarModel, req.MaterialColors)
+		hub.NotifyPlayerJoined(playerID, req.Name)
 	}
 
 	slog.Info("player joined", "roomID", roomID, "playerID", playerID, "name", req.Name)

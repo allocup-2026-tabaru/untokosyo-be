@@ -92,15 +92,10 @@ func (h *RoomHub) UnregisterPlayer(playerID string) {
 }
 
 // NotifyPlayerJoined は waiting 中のプレイヤー参加をホストへ通知する。
-func (h *RoomHub) NotifyPlayerJoined(playerID, name, avatarModel string, materialColors map[string]string) {
+func (h *RoomHub) NotifyPlayerJoined(playerID, name string) {
 	msg := h.marshal(OutgoingMessage{
-		Type: EventTypePlayerJoined,
-		Payload: PlayerJoinedPayload{
-			PlayerID:       playerID,
-			Name:           name,
-			AvatarModel:    avatarModel,
-			MaterialColors: materialColors,
-		},
+		Type:    EventTypePlayerJoined,
+		Payload: PlayerJoinedPayload{PlayerID: playerID, Name: name},
 	})
 	h.BroadcastToHost(msg)
 }

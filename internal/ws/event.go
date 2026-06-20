@@ -64,13 +64,11 @@ type PingMessage struct {
 
 // PlayerSnapshot はホスト画面の room_state / player_update などで使うプレイヤー情報。
 type PlayerSnapshot struct {
-	PlayerID         string            `json:"playerID"`
-	Name             string            `json:"name"`
-	Status           string            `json:"status"`
-	IsPulling        bool              `json:"isPulling"`
-	PullAccumulation float64           `json:"pullAccumulation"`
-	AvatarModel      string            `json:"avatarModel"`
-	MaterialColors   map[string]string `json:"materialColors"`
+	PlayerID         string  `json:"playerID"`
+	Name             string  `json:"name"`
+	Status           string  `json:"status"`
+	IsPulling        bool    `json:"isPulling"`
+	PullAccumulation float64 `json:"pullAccumulation"`
 }
 
 // TurnipSnapshot はホスト画面の room_state で使うカブ状態情報。
@@ -90,10 +88,8 @@ type HostRoomStatePayload struct {
 
 // PlayerJoinedPayload は player_joined のペイロード。
 type PlayerJoinedPayload struct {
-	PlayerID       string            `json:"playerID"`
-	Name           string            `json:"name"`
-	AvatarModel    string            `json:"avatarModel"`
-	MaterialColors map[string]string `json:"materialColors"`
+	PlayerID string `json:"playerID"`
+	Name     string `json:"name"`
 }
 
 // GameStartPayload は game_start のペイロード（ホスト・コントローラー共通）。
