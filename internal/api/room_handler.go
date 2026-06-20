@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -78,6 +79,8 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Info("room created", "roomID", roomID, "hostPlayerID", hostPlayerID)
+
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"roomID":       roomID,
 		"hostPlayerID": hostPlayerID,
@@ -126,6 +129,8 @@ func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
 	if hub, ok := h.manager.GetHub(roomID); ok {
 		hub.NotifyPlayerJoined(playerID, req.Name)
 	}
+
+	slog.Info("player joined", "roomID", roomID, "playerID", playerID, "name", req.Name)
 
 	token, err := auth.GenerateToken(playerID, roomID, h.jwtSecret)
 	if err != nil {
@@ -181,6 +186,8 @@ func (h *RoomHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 	hub.BroadcastGameStart(now.UnixMilli())
 
+	slog.Info("game started", "roomID", roomID, "playerCount", len(room.Players))
+
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -188,5 +195,6 @@ func (h *RoomHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	roomID := chi.URLParam(r, "roomID")
 	h.store.Delete(roomID)
 	h.manager.DeleteHub(roomID)
+	slog.Info("room deleted", "roomID", roomID)
 	w.WriteHeader(http.StatusNoContent)
 }
