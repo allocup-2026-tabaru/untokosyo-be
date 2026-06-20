@@ -180,17 +180,41 @@ func (h *RoomHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now()
-	room.Status = domain.RoomStatusPlaying
-	room.StartedAt = &now
+	// ラグ補正: 最大レイテンシ分だけカウントダウンに余裕を持たせ、
+	// 全プレイヤーが scheduledStartAt より前にメッセージを受け取れるようにする。
+	maxLatency := time.Duration(room.MaxLatencyMs()) * time.Millisecond
+	delay := domain.CountdownDuration + maxLatency + domain.CountdownBuffer
+	scheduledStart := time.Now().Add(delay)
 
-	loop := domain.NewGameLoop(room, h.judge, hub.TickC())
-	hub.SetGameLoop(loop)
-	go loop.Run(h.ctx)
+	room.Status = domain.RoomStatusCountdown
+	room.ScheduledStartAt = &scheduledStart
 
-	hub.BroadcastGameStart(now.UnixMilli())
+	hub.BroadcastGameCountdown(scheduledStart.UnixMilli())
 
-	slog.Info("game started", "roomID", roomID, "playerCount", len(room.Players))
+	slog.Info("game countdown started", "roomID", roomID, "scheduledStartAt", scheduledStart, "maxLatencyMs", room.MaxLatencyMs())
+
+	ctx := h.ctx
+	go func() {
+		timer := time.NewTimer(time.Until(scheduledStart))
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+
+		startedAt := scheduledStart
+		room.Status = domain.RoomStatusPlaying
+		room.StartedAt = &startedAt
+
+		loop := domain.NewGameLoop(room, h.judge, hub.TickC())
+		hub.SetGameLoop(loop)
+		go loop.Run(ctx)
+
+		hub.BroadcastGameStart(startedAt.UnixMilli())
+
+		slog.Info("game started", "roomID", roomID, "playerCount", len(room.Players))
+	}()
 
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
