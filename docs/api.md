@@ -528,17 +528,21 @@ sequenceDiagram
     Host->>HTTP: POST /rooms
     HTTP-->>Host: 201 { roomID, hostPlayerID, token }
 
-    P1->>HTTP: POST /rooms/{roomID}/players { name: "たろう" }
-    HTTP-->>P1: 201 { playerID, name, token }
-    Note over WS: hub.NotifyPlayerJoined()
-
-    P2->>HTTP: POST /rooms/{roomID}/players { name: "はなこ" }
-    HTTP-->>P2: 201 { playerID, name, token }
-    Note over WS: hub.NotifyPlayerJoined()
-
     Host->>WS: GET /ws/rooms/{roomID}/host
     Host->>WS: { "type": "auth", "token": "..." }
     WS-->>Host: { "type": "room_state", ... }
+
+    P1->>HTTP: POST /rooms/{roomID}/players { name: "たろう", avatarModel: "...", materialColors: {...} }
+    HTTP-->>P1: 201 { playerID, name, token }
+    WS-->>Host: { "type": "player_joined", "payload": { "playerID": "...", "name": "たろう" } }
+    Host->>HTTP: GET /rooms/{roomID}
+    HTTP-->>Host: 200 { Players: { "uuid-yyy": { AvatarModel: "...", MaterialColors: {...}, ... } } }
+
+    P2->>HTTP: POST /rooms/{roomID}/players { name: "はなこ", avatarModel: "...", materialColors: {...} }
+    HTTP-->>P2: 201 { playerID, name, token }
+    WS-->>Host: { "type": "player_joined", "payload": { "playerID": "...", "name": "はなこ" } }
+    Host->>HTTP: GET /rooms/{roomID}
+    HTTP-->>Host: 200 { Players: { ..., "uuid-zzz": { AvatarModel: "...", MaterialColors: {...}, ... } } }
 
     P1->>WS: GET /ws/rooms/{roomID}/player?playerID=...
     P1->>WS: { "type": "auth", "token": "..." }
