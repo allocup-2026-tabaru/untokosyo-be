@@ -29,6 +29,8 @@ type Player struct {
 	LatencyMs        int64
 	ClockOffsetMs    int64
 	JoinedAt         time.Time
+	AvatarModel      string
+	MaterialColors   map[string]string
 }
 
 type TurnipState struct {

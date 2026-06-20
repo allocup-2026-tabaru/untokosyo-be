@@ -111,7 +111,9 @@ func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name string `json:"name"`
+		Name           string            `json:"name"`
+		AvatarModel    string            `json:"avatarModel"`
+		MaterialColors map[string]string `json:"materialColors"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -120,14 +122,16 @@ func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
 
 	playerID := newUUID()
 	room.Players[playerID] = &domain.Player{
-		ID:       playerID,
-		Name:     req.Name,
-		Status:   domain.PlayerStatusActive,
-		JoinedAt: time.Now(),
+		ID:             playerID,
+		Name:           req.Name,
+		Status:         domain.PlayerStatusActive,
+		JoinedAt:       time.Now(),
+		AvatarModel:    req.AvatarModel,
+		MaterialColors: req.MaterialColors,
 	}
 
 	if hub, ok := h.manager.GetHub(roomID); ok {
-		hub.NotifyPlayerJoined(playerID, req.Name)
+		hub.NotifyPlayerJoined(playerID, req.Name, req.AvatarModel, req.MaterialColors)
 	}
 
 	slog.Info("player joined", "roomID", roomID, "playerID", playerID, "name", req.Name)

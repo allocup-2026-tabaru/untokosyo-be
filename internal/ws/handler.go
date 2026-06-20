@@ -45,6 +45,8 @@ func (h *Handler) ServeHostWS(w http.ResponseWriter, r *http.Request) {
 			Status:           string(p.Status),
 			IsPulling:        p.IsPulling,
 			PullAccumulation: p.PullAccumulation,
+			AvatarModel:      p.AvatarModel,
+			MaterialColors:   p.MaterialColors,
 		})
 	}
 	snapshot, _ := json.Marshal(OutgoingMessage{
