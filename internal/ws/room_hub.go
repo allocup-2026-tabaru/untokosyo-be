@@ -100,6 +100,16 @@ func (h *RoomHub) NotifyPlayerJoined(playerID, name string) {
 	h.BroadcastToHost(msg)
 }
 
+// BroadcastGameCountdown はゲーム開始予告をホスト・全プレイヤーへ送信する。
+// scheduledStartAt はサーバー絶対時刻（Unix ms）。
+func (h *RoomHub) BroadcastGameCountdown(scheduledStartAt int64) {
+	msg := h.marshal(OutgoingMessage{
+		Type:    EventTypeGameCountdown,
+		Payload: GameCountdownPayload{ScheduledStartAt: scheduledStartAt},
+	})
+	h.broadcastAll(msg)
+}
+
 // BroadcastGameStart はゲーム開始をホスト・全プレイヤーへ送信する。
 func (h *RoomHub) BroadcastGameStart(startedAt int64) {
 	msg := h.marshal(OutgoingMessage{

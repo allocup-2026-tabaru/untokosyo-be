@@ -15,9 +15,10 @@ const (
 type RoomStatus string
 
 const (
-	RoomStatusWaiting  RoomStatus = "waiting"
-	RoomStatusPlaying  RoomStatus = "playing"
-	RoomStatusFinished RoomStatus = "finished"
+	RoomStatusWaiting   RoomStatus = "waiting"
+	RoomStatusCountdown RoomStatus = "countdown"
+	RoomStatusPlaying   RoomStatus = "playing"
+	RoomStatusFinished  RoomStatus = "finished"
 )
 
 type Player struct {
@@ -55,9 +56,23 @@ type Room struct {
 	Turnip       TurnipState
 	Rounds       []RoundResult
 	Winner       *Player
-	CreatedAt    time.Time
-	StartedAt    *time.Time
-	FinishedAt   *time.Time
+	CreatedAt        time.Time
+	ScheduledStartAt *time.Time
+	StartedAt        *time.Time
+	FinishedAt       *time.Time
+}
+
+// MaxLatencyMs は接続中プレイヤーの LatencyMs の最大値を返す。
+func (r *Room) MaxLatencyMs() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var max int64
+	for _, p := range r.Players {
+		if p.LatencyMs > max {
+			max = p.LatencyMs
+		}
+	}
+	return max
 }
 
 // ActivePlayers は Status が active なプレイヤー一覧を返す。

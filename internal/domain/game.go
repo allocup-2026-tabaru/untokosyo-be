@@ -11,6 +11,9 @@ const (
 	PullDeltaPerTick   = 1.0
 	PingInterval       = 5 * time.Second
 	MaxLagCompensation = 200 // ms
+
+	CountdownDuration = 5 * time.Second
+	CountdownBuffer   = 500 * time.Millisecond
 )
 
 type PlayerSnapshot struct {

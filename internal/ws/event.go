@@ -12,6 +12,7 @@ const (
 
 	// サーバー → クライアント（ホスト・コントローラー共通）
 	EventTypeRoomState    EventType = "room_state"
+	EventTypeGameCountdown EventType = "game_countdown"
 	EventTypeGameStart    EventType = "game_start"
 	EventTypePlayerUpdate EventType = "player_update"
 	EventTypeGameFinished EventType = "game_finished"
@@ -90,6 +91,12 @@ type HostRoomStatePayload struct {
 type PlayerJoinedPayload struct {
 	PlayerID string `json:"playerID"`
 	Name     string `json:"name"`
+}
+
+// GameCountdownPayload は game_countdown のペイロード（ホスト・コントローラー共通）。
+// ScheduledStartAt はサーバー絶対時刻（Unix ms）。クライアントは ClockOffsetMs で補正して表示する。
+type GameCountdownPayload struct {
+	ScheduledStartAt int64 `json:"scheduledStartAt"`
 }
 
 // GameStartPayload は game_start のペイロード（ホスト・コントローラー共通）。
