@@ -6,22 +6,27 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/allocup-2026-tabaru/untokosyo-be/internal/auth"
 	"github.com/coder/websocket"
 )
 
 type PlayerClient struct {
-	conn     *websocket.Conn
-	hub      *RoomHub
-	playerID string
-	send     chan []byte
+	conn      *websocket.Conn
+	hub       *RoomHub
+	playerID  string
+	roomID    string
+	jwtSecret string
+	send      chan []byte
 }
 
-func NewPlayerClient(conn *websocket.Conn, hub *RoomHub, playerID string) *PlayerClient {
+func NewPlayerClient(conn *websocket.Conn, hub *RoomHub, playerID, roomID, jwtSecret string) *PlayerClient {
 	return &PlayerClient{
-		conn:     conn,
-		hub:      hub,
-		playerID: playerID,
-		send:     make(chan []byte, 64),
+		conn:      conn,
+		hub:       hub,
+		playerID:  playerID,
+		roomID:    roomID,
+		jwtSecret: jwtSecret,
+		send:      make(chan []byte, 64),
 	}
 }
 
@@ -33,12 +38,17 @@ func (c *PlayerClient) Send(msg []byte) {
 	}
 }
 
-// ReadPump はWS受信ループ。pull/release/pong を hub へ転送する。
+// ReadPump はWS受信ループ。最初のメッセージでJWT認証を行い、以降 pull/release/pong を hub へ転送する。
 func (c *PlayerClient) ReadPump(ctx context.Context) {
 	defer func() {
 		c.hub.UnregisterPlayer(c.playerID)
 		c.conn.Close(websocket.StatusNormalClosure, "")
 	}()
+
+	if !c.authenticate(ctx) {
+		c.conn.Close(websocket.StatusPolicyViolation, "unauthorized")
+		return
+	}
 
 	for {
 		_, data, err := c.conn.Read(ctx)
@@ -69,6 +79,29 @@ func (c *PlayerClient) ReadPump(ctx context.Context) {
 	}
 }
 
+// authenticate はWS接続後の最初のメッセージでJWTを検証する。5秒以内に認証しなければ false を返す。
+func (c *PlayerClient) authenticate(ctx context.Context) bool {
+	authCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	_, data, err := c.conn.Read(authCtx)
+	if err != nil {
+		return false
+	}
+
+	var msg AuthMessage
+	if err := json.Unmarshal(data, &msg); err != nil || msg.Type != EventTypeAuth {
+		return false
+	}
+
+	claims, err := auth.VerifyToken(msg.Token, c.jwtSecret)
+	if err != nil {
+		return false
+	}
+
+	return claims.PlayerID == c.playerID && claims.RoomID == c.roomID
+}
+
 // WritePump は send チャネルからWSへの書き込みループ。
 func (c *PlayerClient) WritePump(ctx context.Context) {
 	for {
@@ -95,7 +128,7 @@ func ServePlayer(hub *RoomHub, playerID string, w http.ResponseWriter, r *http.R
 		return
 	}
 
-	client := NewPlayerClient(conn, hub, playerID)
+	client := NewPlayerClient(conn, hub, playerID, "", "")
 	hub.RegisterPlayer(playerID, client)
 
 	ctx := r.Context()

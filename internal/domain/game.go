@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"log/slog"
 	"time"
 )
 
@@ -30,16 +31,18 @@ type TickResult struct {
 }
 
 type GameLoop struct {
-	room  *Room
-	judge ExtractionJudge
-	tickC chan<- TickResult
+	room   *Room
+	roomID string
+	judge  ExtractionJudge
+	tickC  chan<- TickResult
 }
 
 func NewGameLoop(room *Room, judge ExtractionJudge, tickC chan<- TickResult) *GameLoop {
 	return &GameLoop{
-		room:  room,
-		judge: judge,
-		tickC: tickC,
+		room:   room,
+		roomID: room.ID,
+		judge:  judge,
+		tickC:  tickC,
 	}
 }
 
@@ -102,20 +105,32 @@ func (gl *GameLoop) tick() TickResult {
 	})
 	gl.room.Turnip.ExtractionProbability = probability
 
+	slog.Debug("tick",
+		"roomID", gl.roomID,
+		"totalPull", gl.room.Turnip.TotalPullAccumulation,
+		"probability", probability,
+		"pulling", pullingCount,
+		"active", activeCount,
+	)
+
 	if !extracted {
 		return gl.buildTickResult(false, false)
 	}
 
 	// カブが抜けた: pull中プレイヤーを eliminated に
 	now := time.Now()
+	eliminatedCount := 0
 	for _, p := range gl.room.Players {
 		if p.Status == PlayerStatusActive && p.IsPulling {
 			p.Status = PlayerStatusEliminated
 			p.IsPulling = false
+			eliminatedCount++
 		}
 	}
 	gl.room.Turnip.IsExtracted = true
 	gl.room.Turnip.ExtractedAt = &now
+
+	slog.Info("turnip extracted", "roomID", gl.roomID, "eliminatedCount", eliminatedCount)
 
 	// 残存アクティブプレイヤーの中で PullAccumulation 最大を勝者に
 	var winner *Player
@@ -129,6 +144,13 @@ func (gl *GameLoop) tick() TickResult {
 	gl.room.Winner = winner
 	gl.room.Status = RoomStatusFinished
 	gl.room.FinishedAt = &now
+
+	winnerID, winnerName := "", ""
+	if winner != nil {
+		winnerID = winner.ID
+		winnerName = winner.Name
+	}
+	slog.Info("game finished", "roomID", gl.roomID, "winnerID", winnerID, "winnerName", winnerName)
 
 	return gl.buildTickResult(true, true)
 }
@@ -164,6 +186,7 @@ func (gl *GameLoop) HandlePong(playerID string, serverTimestamp, clientTimestamp
 	rtt := time.Now().UnixMilli() - serverTimestamp
 	p.LatencyMs = rtt / 2
 	p.ClockOffsetMs = serverTimestamp + rtt/2 - clientTimestamp
+	slog.Debug("pong", "roomID", gl.roomID, "playerID", playerID, "latencyMs", p.LatencyMs, "clockOffsetMs", p.ClockOffsetMs)
 }
 
 func (gl *GameLoop) HandlePull(playerID string, clientTimestamp int64) {
@@ -182,11 +205,13 @@ func (gl *GameLoop) HandlePull(playerID string, clientTimestamp int64) {
 	if lag > MaxLagCompensation {
 		lag = MaxLagCompensation
 	}
+	compensation := 0.0
 	if lag > 0 {
-		compensation := float64(lag) / float64(TickRate.Milliseconds())
+		compensation = float64(lag) / float64(TickRate.Milliseconds())
 		p.PullAccumulation += compensation
 		gl.room.Turnip.TotalPullAccumulation += compensation
 	}
+	slog.Debug("pull", "roomID", gl.roomID, "playerID", playerID, "compensation", compensation, "accumulation", p.PullAccumulation)
 }
 
 func (gl *GameLoop) HandleRelease(playerID string, clientTimestamp int64) {
@@ -198,4 +223,5 @@ func (gl *GameLoop) HandleRelease(playerID string, clientTimestamp int64) {
 		return
 	}
 	p.IsPulling = false
+	slog.Debug("release", "roomID", gl.roomID, "playerID", playerID)
 }

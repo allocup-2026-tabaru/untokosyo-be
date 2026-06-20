@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/api"
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/domain"
@@ -15,22 +18,34 @@ import (
 )
 
 func main() {
+	// LOG_LEVEL=debug のときだけ DEBUG 以上を出力する。未設定・それ以外の値は INFO にフォールバック。
+	logLevel := slog.LevelInfo
+	if strings.ToLower(os.Getenv("LOG_LEVEL")) == "debug" {
+		logLevel = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET is required")
 	}
 
 	ctx := context.Background()
 
 	roomStore := store.NewMemoryRoomStore()
 	manager := ws.NewHubManager()
-	wsHandler := ws.NewHandler(roomStore, manager)
+	wsHandler := ws.NewHandler(roomStore, manager, jwtSecret)
 
 	judge := domain.NewExtractionJudge(domain.JudgeConfig{
 		Type:   domain.JudgeTypeSigmoid,
 		Params: map[string]float64{"midpoint": 100.0, "steepness": 0.05},
 	})
-	roomHandler := api.NewRoomHandler(ctx, roomStore, manager, judge)
+	roomHandler := api.NewRoomHandler(ctx, roomStore, manager, judge, jwtSecret)
 
 	// サンプル: カウンターブロードキャスト用 Hub
 	sampleHub := ws.NewHub()

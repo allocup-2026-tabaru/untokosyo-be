@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/allocup-2026-tabaru/untokosyo-be/internal/auth"
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/domain"
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/store"
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/ws"
@@ -15,14 +17,15 @@ import (
 )
 
 type RoomHandler struct {
-	store   store.RoomStore
-	manager *ws.HubManager
-	judge   domain.ExtractionJudge
-	ctx     context.Context
+	store     store.RoomStore
+	manager   *ws.HubManager
+	judge     domain.ExtractionJudge
+	ctx       context.Context
+	jwtSecret string
 }
 
-func NewRoomHandler(ctx context.Context, s store.RoomStore, m *ws.HubManager, j domain.ExtractionJudge) *RoomHandler {
-	return &RoomHandler{store: s, manager: m, judge: j, ctx: ctx}
+func NewRoomHandler(ctx context.Context, s store.RoomStore, m *ws.HubManager, j domain.ExtractionJudge, jwtSecret string) *RoomHandler {
+	return &RoomHandler{store: s, manager: m, judge: j, ctx: ctx, jwtSecret: jwtSecret}
 }
 
 func newUUID() string {
@@ -70,9 +73,18 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	h.manager.CreateHub(h.ctx, roomID)
 
+	token, err := auth.GenerateToken(hostPlayerID, roomID, h.jwtSecret)
+	if err != nil {
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("room created", "roomID", roomID, "hostPlayerID", hostPlayerID)
+
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"roomID":       roomID,
 		"hostPlayerID": hostPlayerID,
+		"token":        token,
 	})
 }
 
@@ -118,9 +130,18 @@ func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
 		hub.NotifyPlayerJoined(playerID, req.Name)
 	}
 
+	slog.Info("player joined", "roomID", roomID, "playerID", playerID, "name", req.Name)
+
+	token, err := auth.GenerateToken(playerID, roomID, h.jwtSecret)
+	if err != nil {
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"playerID": playerID,
 		"name":     req.Name,
+		"token":    token,
 	})
 }
 
@@ -165,6 +186,8 @@ func (h *RoomHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 	hub.BroadcastGameStart(now.UnixMilli())
 
+	slog.Info("game started", "roomID", roomID, "playerCount", len(room.Players))
+
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -172,5 +195,6 @@ func (h *RoomHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	roomID := chi.URLParam(r, "roomID")
 	h.store.Delete(roomID)
 	h.manager.DeleteHub(roomID)
+	slog.Info("room deleted", "roomID", roomID)
 	w.WriteHeader(http.StatusNoContent)
 }

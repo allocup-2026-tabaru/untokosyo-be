@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"sort"
 	"sync"
 	"time"
@@ -119,8 +120,10 @@ func (h *RoomHub) Run(ctx context.Context) {
 			h.mu.Lock()
 			if reg.host != nil {
 				h.host = reg.host
+				slog.Debug("host registered", "roomID", h.roomID)
 			} else if reg.player != nil {
 				h.players[reg.playerID] = reg.player
+				slog.Debug("player registered", "roomID", h.roomID, "playerID", reg.playerID)
 			}
 			h.mu.Unlock()
 
@@ -128,8 +131,10 @@ func (h *RoomHub) Run(ctx context.Context) {
 			h.mu.Lock()
 			if unreg.playerID == "" {
 				h.host = nil
+				slog.Debug("host unregistered", "roomID", h.roomID)
 			} else {
 				delete(h.players, unreg.playerID)
+				slog.Debug("player unregistered", "roomID", h.roomID, "playerID", unreg.playerID)
 			}
 			h.mu.Unlock()
 
