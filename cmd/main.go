@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/api"
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/domain"
@@ -16,6 +18,13 @@ import (
 )
 
 func main() {
+	// LOG_LEVEL=debug のときだけ DEBUG 以上を出力する。未設定・それ以外の値は INFO にフォールバック。
+	logLevel := slog.LevelInfo
+	if strings.ToLower(os.Getenv("LOG_LEVEL")) == "debug" {
+		logLevel = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

@@ -2,6 +2,7 @@ package ws
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/store"
@@ -60,6 +61,7 @@ func (h *Handler) ServeHostWS(w http.ResponseWriter, r *http.Request) {
 	client.Send(snapshot)
 
 	hub.RegisterHost(client)
+	slog.Debug("host ws connected", "roomID", roomID)
 
 	ctx := r.Context()
 	go client.WritePump(ctx)
@@ -106,6 +108,7 @@ func (h *Handler) ServePlayerWS(w http.ResponseWriter, r *http.Request) {
 	client.Send(snapshot)
 
 	hub.RegisterPlayer(playerID, client)
+	slog.Debug("player ws connected", "roomID", roomID, "playerID", playerID)
 
 	ctx := r.Context()
 	go client.WritePump(ctx)
