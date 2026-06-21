@@ -30,6 +30,8 @@ type clientRegistration struct {
 }
 
 type clientUnregistration struct {
+	host     clientSender
+	player   clientSender
 	playerID string // "" = ホスト切断
 }
 
@@ -86,9 +88,19 @@ func (h *RoomHub) UnregisterHost() {
 	h.unregister <- clientUnregistration{playerID: ""}
 }
 
+// UnregisterHostClient は指定ホスト接続の切断を通知する。
+func (h *RoomHub) UnregisterHostClient(client clientSender) {
+	h.unregister <- clientUnregistration{playerID: "", host: client}
+}
+
 // UnregisterPlayer はプレイヤー切断を通知する。
 func (h *RoomHub) UnregisterPlayer(playerID string) {
 	h.unregister <- clientUnregistration{playerID: playerID}
+}
+
+// UnregisterPlayerClient は指定プレイヤー接続の切断を通知する。
+func (h *RoomHub) UnregisterPlayerClient(playerID string, client clientSender) {
+	h.unregister <- clientUnregistration{playerID: playerID, player: client}
 }
 
 // NotifyPlayerJoined は waiting 中のプレイヤー参加をホストへ通知する。
@@ -98,6 +110,25 @@ func (h *RoomHub) NotifyPlayerJoined(playerID, name string) {
 		Payload: PlayerJoinedPayload{PlayerID: playerID, Name: name},
 	})
 	h.BroadcastToHost(msg)
+}
+
+// NotifyPlayerLeft はプレイヤー切断をホストへ通知する。
+func (h *RoomHub) NotifyPlayerLeft(playerID string) {
+	msg := h.marshal(OutgoingMessage{
+		Type:    EventTypePlayerLeft,
+		Payload: PlayerLeftPayload{PlayerID: playerID},
+	})
+	h.BroadcastToHost(msg)
+}
+
+// BroadcastGameCountdown はゲーム開始予告をホスト・全プレイヤーへ送信する。
+// scheduledStartAt はサーバー絶対時刻（Unix ms）。
+func (h *RoomHub) BroadcastGameCountdown(scheduledStartAt int64) {
+	msg := h.marshal(OutgoingMessage{
+		Type:    EventTypeGameCountdown,
+		Payload: GameCountdownPayload{ScheduledStartAt: scheduledStartAt},
+	})
+	h.broadcastAll(msg)
 }
 
 // BroadcastGameStart はゲーム開始をホスト・全プレイヤーへ送信する。
@@ -127,16 +158,25 @@ func (h *RoomHub) Run(ctx context.Context) {
 			}
 			h.mu.Unlock()
 
-		case unreg := <-h.unregister:
+			case unreg := <-h.unregister:
+			leftPlayerID := ""
 			h.mu.Lock()
 			if unreg.playerID == "" {
-				h.host = nil
-				slog.Debug("host unregistered", "roomID", h.roomID)
+				if unreg.host == nil || h.host == unreg.host {
+					h.host = nil
+					slog.Debug("host unregistered", "roomID", h.roomID)
+				}
 			} else {
-				delete(h.players, unreg.playerID)
-				slog.Debug("player unregistered", "roomID", h.roomID, "playerID", unreg.playerID)
+				if current, ok := h.players[unreg.playerID]; ok && (unreg.player == nil || current == unreg.player) {
+					delete(h.players, unreg.playerID)
+					leftPlayerID = unreg.playerID
+					slog.Debug("player unregistered", "roomID", h.roomID, "playerID", unreg.playerID)
+				}
 			}
 			h.mu.Unlock()
+			if leftPlayerID != "" {
+				h.NotifyPlayerLeft(leftPlayerID)
+			}
 
 		case result := <-h.tickC:
 			h.handleTick(result)

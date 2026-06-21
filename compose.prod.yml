@@ -1,0 +1,29 @@
+services:
+  server:
+    image: asia-northeast1-docker.pkg.dev/${GCP_PROJECT_ID}/untokosyo-be/server:latest
+    restart: always
+    expose:
+      - "8080"
+    environment:
+      - PORT=${PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - LOG_LEVEL=${LOG_LEVEL}
+
+  caddy:
+    image: caddy:2
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN}
+    depends_on:
+      - server
+
+volumes:
+  caddy_data:
+  caddy_config:

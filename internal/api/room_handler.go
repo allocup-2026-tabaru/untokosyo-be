@@ -55,10 +55,11 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Status:       domain.RoomStatusWaiting,
 		Players: map[string]*domain.Player{
 			hostPlayerID: {
-				ID:       hostPlayerID,
-				Name:     "host",
-				Status:   domain.PlayerStatusActive,
-				JoinedAt: now,
+				ID:        hostPlayerID,
+				Name:      "host",
+				Status:    domain.PlayerStatusActive,
+				Connected: false,
+				JoinedAt:  now,
 			},
 		},
 		Turnip:    domain.TurnipState{},
@@ -95,7 +96,59 @@ func (h *RoomHandler) Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "room not found", http.StatusNotFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, room)
+
+	type roomPlayerResponse struct {
+		ID               string            `json:"ID"`
+		Name             string            `json:"Name"`
+		Status           string            `json:"Status"`
+		Connected        bool              `json:"Connected"`
+		IsPulling        bool              `json:"IsPulling"`
+		PullAccumulation float64           `json:"PullAccumulation"`
+		AvatarModel      string            `json:"AvatarModel,omitempty"`
+		MaterialColors   map[string]string `json:"MaterialColors,omitempty"`
+		JoinedAt         time.Time         `json:"JoinedAt"`
+	}
+	type roomResponse struct {
+		ID               string                        `json:"ID"`
+		HostPlayerID     string                        `json:"HostPlayerID"`
+		Status           domain.RoomStatus             `json:"Status"`
+		Players          map[string]roomPlayerResponse `json:"Players"`
+		Winner           *domain.Player                `json:"Winner"`
+		CreatedAt        time.Time                     `json:"CreatedAt"`
+		ScheduledStartAt *time.Time                    `json:"ScheduledStartAt"`
+		StartedAt        *time.Time                    `json:"StartedAt"`
+		FinishedAt       *time.Time                    `json:"FinishedAt"`
+	}
+
+	players := make(map[string]roomPlayerResponse)
+	for id, p := range room.Players {
+		if !p.Connected {
+			continue
+		}
+		players[id] = roomPlayerResponse{
+			ID:               p.ID,
+			Name:             p.Name,
+			Status:           string(p.Status),
+			Connected:        p.Connected,
+			IsPulling:        p.IsPulling,
+			PullAccumulation: p.PullAccumulation,
+			AvatarModel:      p.AvatarModel,
+			MaterialColors:   p.MaterialColors,
+			JoinedAt:         p.JoinedAt,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, roomResponse{
+		ID:               room.ID,
+		HostPlayerID:     room.HostPlayerID,
+		Status:           room.Status,
+		Players:          players,
+		Winner:           room.Winner,
+		CreatedAt:        room.CreatedAt,
+		ScheduledStartAt: room.ScheduledStartAt,
+		StartedAt:        room.StartedAt,
+		FinishedAt:       room.FinishedAt,
+	})
 }
 
 func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +164,9 @@ func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name string `json:"name"`
+		Name           string            `json:"name"`
+		AvatarModel    string            `json:"avatarModel"`
+		MaterialColors map[string]string `json:"materialColors"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -120,14 +175,13 @@ func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
 
 	playerID := newUUID()
 	room.Players[playerID] = &domain.Player{
-		ID:       playerID,
-		Name:     req.Name,
-		Status:   domain.PlayerStatusActive,
-		JoinedAt: time.Now(),
-	}
-
-	if hub, ok := h.manager.GetHub(roomID); ok {
-		hub.NotifyPlayerJoined(playerID, req.Name)
+		ID:             playerID,
+		Name:           req.Name,
+		Status:         domain.PlayerStatusActive,
+		Connected:      false,
+		JoinedAt:       time.Now(),
+		AvatarModel:    req.AvatarModel,
+		MaterialColors: req.MaterialColors,
 	}
 
 	slog.Info("player joined", "roomID", roomID, "playerID", playerID, "name", req.Name)
@@ -176,17 +230,41 @@ func (h *RoomHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now()
-	room.Status = domain.RoomStatusPlaying
-	room.StartedAt = &now
+	// ラグ補正: 最大レイテンシ分だけカウントダウンに余裕を持たせ、
+	// 全プレイヤーが scheduledStartAt より前にメッセージを受け取れるようにする。
+	maxLatency := time.Duration(room.MaxLatencyMs()) * time.Millisecond
+	delay := domain.CountdownDuration + maxLatency + domain.CountdownBuffer
+	scheduledStart := time.Now().Add(delay)
 
-	loop := domain.NewGameLoop(room, h.judge, hub.TickC())
-	hub.SetGameLoop(loop)
-	go loop.Run(h.ctx)
+	room.Status = domain.RoomStatusCountdown
+	room.ScheduledStartAt = &scheduledStart
 
-	hub.BroadcastGameStart(now.UnixMilli())
+	hub.BroadcastGameCountdown(scheduledStart.UnixMilli())
 
-	slog.Info("game started", "roomID", roomID, "playerCount", len(room.Players))
+	slog.Info("game countdown started", "roomID", roomID, "scheduledStartAt", scheduledStart, "maxLatencyMs", room.MaxLatencyMs())
+
+	ctx := h.ctx
+	go func() {
+		timer := time.NewTimer(time.Until(scheduledStart))
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+
+		startedAt := scheduledStart
+		room.Status = domain.RoomStatusPlaying
+		room.StartedAt = &startedAt
+
+		loop := domain.NewGameLoop(room, h.judge, hub.TickC())
+		hub.SetGameLoop(loop)
+		go loop.Run(ctx)
+
+		hub.BroadcastGameStart(startedAt.UnixMilli())
+
+		slog.Info("game started", "roomID", roomID, "playerCount", len(room.Players))
+	}()
 
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

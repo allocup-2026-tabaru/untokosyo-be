@@ -29,8 +29,11 @@ cp .env.template .env
 | `GCP_ZONE` | ゾーン | `asia-northeast1-a` |
 | `VM_NAME` | VM インスタンス名 | `untokosyo-be-vm` |
 | `DOMAIN` | 公開ドメイン（sslip.io 形式）| `changeme.sslip.io` |
+| `JWT_SECRET` | JWT 認証シークレット（必須）| — |
+| `LOG_LEVEL` | ログレベル | `info` |
 
-`DOMAIN` は VM 作成後に外部 IP が確定してから設定する（「手順 3」参照）。
+`DOMAIN` は VM 作成後に外部 IP が確定してから設定する（「手順 3」参照）。  
+`JWT_SECRET` は `make gen-secret` で生成してから `.env` に設定すること。
 
 ---
 
@@ -107,18 +110,13 @@ gcloud compute ssh untokosyo-be-vm \
   --zone=asia-northeast1-a --project=untokosyo-be \
   --command="sudo bash /tmp/setup.sh"
 
-# compose.yml / Caddyfile を VM に配置
-gcloud compute scp ../infra/vm/compose.yml ../infra/vm/Caddyfile \
-  untokosyo-be-vm:/tmp/ \
-  --zone=asia-northeast1-a --project=untokosyo-be
+# デプロイ用ディレクトリを作成（初回のみ）
 gcloud compute ssh untokosyo-be-vm \
   --zone=asia-northeast1-a --project=untokosyo-be \
-  --command=" \
-    sudo mkdir -p /opt/untokosyo-be && \
-    sudo mv /tmp/compose.yml /tmp/Caddyfile /opt/untokosyo-be/ && \
-    printf 'GCP_PROJECT_ID=untokosyo-be\nDOMAIN=<YOUR_DOMAIN>\n' \
-      | sudo tee /opt/untokosyo-be/.env > /dev/null \
-  "
+  --command="sudo mkdir -p /opt/untokosyo-be"
+
+# 初回デプロイ（compose.yml / Caddyfile / .env の転送も行う）
+make deploy
 ```
 
 ---
