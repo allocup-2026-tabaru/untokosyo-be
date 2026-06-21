@@ -55,10 +55,11 @@ func (h *RoomHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Status:       domain.RoomStatusWaiting,
 		Players: map[string]*domain.Player{
 			hostPlayerID: {
-				ID:       hostPlayerID,
-				Name:     "host",
-				Status:   domain.PlayerStatusActive,
-				JoinedAt: now,
+				ID:        hostPlayerID,
+				Name:      "host",
+				Status:    domain.PlayerStatusActive,
+				Connected: false,
+				JoinedAt:  now,
 			},
 		},
 		Turnip:    domain.TurnipState{},
@@ -95,7 +96,59 @@ func (h *RoomHandler) Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "room not found", http.StatusNotFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, room)
+
+	type roomPlayerResponse struct {
+		ID               string            `json:"ID"`
+		Name             string            `json:"Name"`
+		Status           string            `json:"Status"`
+		Connected        bool              `json:"Connected"`
+		IsPulling        bool              `json:"IsPulling"`
+		PullAccumulation float64           `json:"PullAccumulation"`
+		AvatarModel      string            `json:"AvatarModel,omitempty"`
+		MaterialColors   map[string]string `json:"MaterialColors,omitempty"`
+		JoinedAt         time.Time         `json:"JoinedAt"`
+	}
+	type roomResponse struct {
+		ID               string                        `json:"ID"`
+		HostPlayerID     string                        `json:"HostPlayerID"`
+		Status           domain.RoomStatus             `json:"Status"`
+		Players          map[string]roomPlayerResponse `json:"Players"`
+		Winner           *domain.Player                `json:"Winner"`
+		CreatedAt        time.Time                     `json:"CreatedAt"`
+		ScheduledStartAt *time.Time                    `json:"ScheduledStartAt"`
+		StartedAt        *time.Time                    `json:"StartedAt"`
+		FinishedAt       *time.Time                    `json:"FinishedAt"`
+	}
+
+	players := make(map[string]roomPlayerResponse)
+	for id, p := range room.Players {
+		if !p.Connected {
+			continue
+		}
+		players[id] = roomPlayerResponse{
+			ID:               p.ID,
+			Name:             p.Name,
+			Status:           string(p.Status),
+			Connected:        p.Connected,
+			IsPulling:        p.IsPulling,
+			PullAccumulation: p.PullAccumulation,
+			AvatarModel:      p.AvatarModel,
+			MaterialColors:   p.MaterialColors,
+			JoinedAt:         p.JoinedAt,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, roomResponse{
+		ID:               room.ID,
+		HostPlayerID:     room.HostPlayerID,
+		Status:           room.Status,
+		Players:          players,
+		Winner:           room.Winner,
+		CreatedAt:        room.CreatedAt,
+		ScheduledStartAt: room.ScheduledStartAt,
+		StartedAt:        room.StartedAt,
+		FinishedAt:       room.FinishedAt,
+	})
 }
 
 func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
@@ -125,13 +178,10 @@ func (h *RoomHandler) Join(w http.ResponseWriter, r *http.Request) {
 		ID:             playerID,
 		Name:           req.Name,
 		Status:         domain.PlayerStatusActive,
+		Connected:      false,
 		JoinedAt:       time.Now(),
 		AvatarModel:    req.AvatarModel,
 		MaterialColors: req.MaterialColors,
-	}
-
-	if hub, ok := h.manager.GetHub(roomID); ok {
-		hub.NotifyPlayerJoined(playerID, req.Name)
 	}
 
 	slog.Info("player joined", "roomID", roomID, "playerID", playerID, "name", req.Name)
