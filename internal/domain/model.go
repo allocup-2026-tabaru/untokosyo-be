@@ -25,6 +25,8 @@ type Player struct {
 	ID               string
 	Name             string
 	Status           PlayerStatus
+	Connected        bool
+	currentConnID    int64
 	IsPulling        bool
 	PullAccumulation float64
 	LatencyMs        int64
@@ -56,6 +58,7 @@ type Room struct {
 	Turnip       TurnipState
 	Rounds       []RoundResult
 	Winner       *Player
+	nextConnID       int64
 	CreatedAt        time.Time
 	ScheduledStartAt *time.Time
 	StartedAt        *time.Time
@@ -99,4 +102,35 @@ func (r *Room) PullingPlayers() []*Player {
 		}
 	}
 	return result
+}
+
+// ConnectPlayer はプレイヤーを接続中にし、この接続を識別するIDを返す。
+func (r *Room) ConnectPlayer(playerID string) (int64, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	player, ok := r.Players[playerID]
+	if !ok {
+		return 0, false
+	}
+
+	r.nextConnID++
+	player.currentConnID = r.nextConnID
+	player.Connected = true
+	return player.currentConnID, true
+}
+
+// DisconnectPlayer は現在の接続IDと一致する場合だけ切断状態に戻す。
+func (r *Room) DisconnectPlayer(playerID string, connID int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	player, ok := r.Players[playerID]
+	if !ok || player.currentConnID != connID {
+		return false
+	}
+
+	player.Connected = false
+	player.IsPulling = false
+	return true
 }

@@ -3,26 +3,29 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"time"
 
 	"github.com/allocup-2026-tabaru/untokosyo-be/internal/auth"
+	"github.com/allocup-2026-tabaru/untokosyo-be/internal/domain"
 	"github.com/coder/websocket"
 )
 
 type HostClient struct {
 	conn         *websocket.Conn
 	hub          *RoomHub
+	room         *domain.Room
 	roomID       string
 	hostPlayerID string
+	connID       int64
 	jwtSecret    string
 	send         chan []byte
 }
 
-func NewHostClient(conn *websocket.Conn, hub *RoomHub, roomID, hostPlayerID, jwtSecret string) *HostClient {
+func NewHostClient(conn *websocket.Conn, hub *RoomHub, room *domain.Room, roomID, hostPlayerID, jwtSecret string) *HostClient {
 	return &HostClient{
 		conn:         conn,
 		hub:          hub,
+		room:         room,
 		roomID:       roomID,
 		hostPlayerID: hostPlayerID,
 		jwtSecret:    jwtSecret,
@@ -38,17 +41,13 @@ func (c *HostClient) Send(msg []byte) {
 	}
 }
 
-// ReadPump はWS受信ループ。最初のメッセージでJWT認証を行い、以降 pong を hub へ転送する。
+// ReadPump は認証済みWSの受信ループ。pong を hub へ転送する。
 func (c *HostClient) ReadPump(ctx context.Context) {
 	defer func() {
-		c.hub.UnregisterHost()
+		c.room.DisconnectPlayer(c.hostPlayerID, c.connID)
+		c.hub.UnregisterHostClient(c)
 		c.conn.Close(websocket.StatusNormalClosure, "")
 	}()
-
-	if !c.authenticate(ctx) {
-		c.conn.Close(websocket.StatusPolicyViolation, "unauthorized")
-		return
-	}
 
 	for {
 		_, data, err := c.conn.Read(ctx)
@@ -75,8 +74,12 @@ func (c *HostClient) ReadPump(ctx context.Context) {
 	}
 }
 
-// authenticate はWS接続後の最初のメッセージでJWTを検証する。5秒以内に認証しなければ false を返す。
-func (c *HostClient) authenticate(ctx context.Context) bool {
+func (c *HostClient) SetConnectionID(connID int64) {
+	c.connID = connID
+}
+
+// Authenticate はWS接続後の最初のメッセージでJWTを検証する。5秒以内に認証しなければ false を返す。
+func (c *HostClient) Authenticate(ctx context.Context) bool {
 	authCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -113,21 +116,4 @@ func (c *HostClient) WritePump(ctx context.Context) {
 			}
 		}
 	}
-}
-
-// ServeHost はホスト画面のWSハンドシェイクからポンプ起動までを行うハンドラ。
-func ServeHost(hub *RoomHub, w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true,
-	})
-	if err != nil {
-		return
-	}
-
-	client := NewHostClient(conn, hub, "", "", "")
-	hub.RegisterHost(client)
-
-	ctx := r.Context()
-	go client.WritePump(ctx)
-	client.ReadPump(ctx)
 }

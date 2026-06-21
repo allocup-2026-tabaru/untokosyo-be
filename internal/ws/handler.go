@@ -35,10 +35,25 @@ func (h *Handler) ServeHostWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := NewHostClient(conn, hub, roomID, room.HostPlayerID, h.jwtSecret)
+	client := NewHostClient(conn, hub, room, roomID, room.HostPlayerID, h.jwtSecret)
+	ctx := r.Context()
+	if !client.Authenticate(ctx) {
+		conn.Close(websocket.StatusPolicyViolation, "unauthorized")
+		return
+	}
+
+	connID, ok := room.ConnectPlayer(room.HostPlayerID)
+	if !ok {
+		conn.Close(websocket.StatusInternalError, "host not found")
+		return
+	}
+	client.SetConnectionID(connID)
 
 	players := make([]PlayerSnapshot, 0, len(room.Players))
 	for _, p := range room.Players {
+		if !p.Connected {
+			continue
+		}
 		players = append(players, PlayerSnapshot{
 			PlayerID:         p.ID,
 			Name:             p.Name,
@@ -63,7 +78,6 @@ func (h *Handler) ServeHostWS(w http.ResponseWriter, r *http.Request) {
 	hub.RegisterHost(client)
 	slog.Debug("host ws connected", "roomID", roomID)
 
-	ctx := r.Context()
 	go client.WritePump(ctx)
 	client.ReadPump(ctx)
 }
@@ -95,7 +109,19 @@ func (h *Handler) ServePlayerWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := NewPlayerClient(conn, hub, playerID, roomID, h.jwtSecret)
+	client := NewPlayerClient(conn, hub, room, playerID, roomID, h.jwtSecret)
+	ctx := r.Context()
+	if !client.Authenticate(ctx) {
+		conn.Close(websocket.StatusPolicyViolation, "unauthorized")
+		return
+	}
+
+	connID, ok := room.ConnectPlayer(playerID)
+	if !ok {
+		conn.Close(websocket.StatusInternalError, "player not found")
+		return
+	}
+	client.SetConnectionID(connID)
 
 	snapshot, _ := json.Marshal(OutgoingMessage{
 		Type: EventTypeRoomState,
@@ -108,9 +134,9 @@ func (h *Handler) ServePlayerWS(w http.ResponseWriter, r *http.Request) {
 	client.Send(snapshot)
 
 	hub.RegisterPlayer(playerID, client)
+	hub.NotifyPlayerJoined(playerID, player.Name)
 	slog.Debug("player ws connected", "roomID", roomID, "playerID", playerID)
 
-	ctx := r.Context()
 	go client.WritePump(ctx)
 	client.ReadPump(ctx)
 }
