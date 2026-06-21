@@ -24,9 +24,31 @@ type SigmoidJudge struct {
 }
 
 func (j *SigmoidJudge) Judge(input JudgeInput) (probability float64, extracted bool) {
-	// 累積を主軸にしつつ、今この瞬間の引っ張り人数を少しだけ上乗せする。
-	// これで「ずっと引いている重み」は保ちつつ、現在の圧力も反映する。
-	x := input.TotalPullAccumulation + float64(input.PullingPlayerCount)*instantPressureWeight
+	activeCount := float64(input.ActivePlayerCount)
+	if activeCount < 1 {
+		activeCount = 1
+	}
+
+	pullingCount := float64(input.PullingPlayerCount)
+	if pullingCount < 0 {
+		pullingCount = 0
+	}
+
+	elapsedSeconds := input.ElapsedSeconds
+	if elapsedSeconds < 0 {
+		elapsedSeconds = 0
+	}
+
+	// 累積は主材料。人数が増えたときに極端に跳ねないよう、少しだけ逓減させる。
+	normalizedAccumulation := input.TotalPullAccumulation / math.Sqrt(activeCount)
+
+	// 現在の圧力は「引いている人数」の影響を圧縮しつつ、確実に押し上げる。
+	instantPressure := math.Sqrt(pullingCount) * instantPressureWeight * 12.0
+
+	// 長引くほど少しずつ抜けやすくして、膠着を減らす。
+	timePressure := math.Log1p(elapsedSeconds) * 4.0
+
+	x := normalizedAccumulation + instantPressure + timePressure
 	probability = 1.0 / (1.0 + math.Exp(-j.Steepness*(x-j.Midpoint)))
 	if input.PullingPlayerCount == 0 {
 		return probability, false
