@@ -20,6 +20,7 @@ const (
 
 	// サーバー → ホスト専用
 	EventTypePlayerJoined EventType = "player_joined"
+	EventTypePlayerLeft   EventType = "player_left"
 	EventTypeTurnipUpdate EventType = "turnip_update"
 	EventTypeExtracted    EventType = "extracted"
 
@@ -91,6 +92,11 @@ type HostRoomStatePayload struct {
 type PlayerJoinedPayload struct {
 	PlayerID string `json:"playerID"`
 	Name     string `json:"name"`
+}
+
+// PlayerLeftPayload は player_left のペイロード。
+type PlayerLeftPayload struct {
+	PlayerID string `json:"playerID"`
 }
 
 // GameCountdownPayload は game_countdown のペイロード（ホスト・コントローラー共通）。
