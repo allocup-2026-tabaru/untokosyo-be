@@ -5,6 +5,8 @@ import (
 	"math/rand"
 )
 
+const instantPressureWeight = 0.25
+
 type JudgeInput struct {
 	TotalPullAccumulation float64
 	ActivePlayerCount     int
@@ -22,7 +24,9 @@ type SigmoidJudge struct {
 }
 
 func (j *SigmoidJudge) Judge(input JudgeInput) (probability float64, extracted bool) {
-	x := input.TotalPullAccumulation
+	// 累積を主軸にしつつ、今この瞬間の引っ張り人数を少しだけ上乗せする。
+	// これで「ずっと引いている重み」は保ちつつ、現在の圧力も反映する。
+	x := input.TotalPullAccumulation + float64(input.PullingPlayerCount)*instantPressureWeight
 	probability = 1.0 / (1.0 + math.Exp(-j.Steepness*(x-j.Midpoint)))
 	if input.PullingPlayerCount == 0 {
 		return probability, false
