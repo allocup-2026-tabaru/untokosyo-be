@@ -36,15 +36,16 @@ type clientUnregistration struct {
 }
 
 type RoomHub struct {
-	roomID     string
-	host       clientSender
-	players    map[string]clientSender
-	mu         sync.RWMutex
-	register   chan clientRegistration
-	unregister chan clientUnregistration
-	tickC      chan domain.TickResult
-	gameEvt    chan gameEvent
-	loop       *domain.GameLoop
+	roomID       string
+	hostPlayerID string
+	host         clientSender
+	players      map[string]clientSender
+	mu           sync.RWMutex
+	register     chan clientRegistration
+	unregister   chan clientUnregistration
+	tickC        chan domain.TickResult
+	gameEvt      chan gameEvent
+	loop         *domain.GameLoop
 }
 
 func NewRoomHub(roomID string) *RoomHub {
@@ -71,6 +72,11 @@ func (h *RoomHub) GameEvtC() chan<- gameEvent {
 // SetGameLoop はゲーム開始時に api 層から呼ばれる。
 func (h *RoomHub) SetGameLoop(loop *domain.GameLoop) {
 	h.loop = loop
+}
+
+// SetHostPlayerID はホストプレイヤーIDを設定する。順位計算から除外するために使用する。
+func (h *RoomHub) SetHostPlayerID(id string) {
+	h.hostPlayerID = id
 }
 
 // RegisterHost はホスト接続を登録する。
@@ -257,7 +263,7 @@ func (h *RoomHub) handleTick(result domain.TickResult) {
 	}
 
 	if result.Finished {
-		standings := buildStandings(result.Players)
+		standings := buildStandings(result.Players, h.hostPlayerID)
 
 		winnerID := ""
 		winnerName := ""
@@ -281,6 +287,9 @@ func (h *RoomHub) handleTick(result domain.TickResult) {
 			rankMap[s.PlayerID] = s.Rank
 		}
 		for _, snap := range result.Players {
+			if snap.ID == h.hostPlayerID {
+				continue
+			}
 			msg := h.marshal(OutgoingMessage{
 				Type: EventTypeGameFinished,
 				Payload: ControllerGameFinishedPayload{
@@ -350,12 +359,20 @@ func (h *RoomHub) marshal(v any) []byte {
 	return b
 }
 
-func buildStandings(players map[string]domain.PlayerSnapshot) []StandingEntry {
+func buildStandings(players map[string]domain.PlayerSnapshot, hostPlayerID string) []StandingEntry {
 	snaps := make([]domain.PlayerSnapshot, 0, len(players))
 	for _, s := range players {
+		if s.ID == hostPlayerID {
+			continue
+		}
 		snaps = append(snaps, s)
 	}
 	sort.Slice(snaps, func(i, j int) bool {
+		iActive := snaps[i].Status == domain.PlayerStatusActive
+		jActive := snaps[j].Status == domain.PlayerStatusActive
+		if iActive != jActive {
+			return iActive
+		}
 		return snaps[i].PullAccumulation > snaps[j].PullAccumulation
 	})
 

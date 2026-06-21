@@ -258,6 +258,7 @@ func (h *RoomHandler) Start(w http.ResponseWriter, r *http.Request) {
 		room.StartedAt = &startedAt
 
 		loop := domain.NewGameLoop(room, h.judge, hub.TickC())
+		hub.SetHostPlayerID(room.HostPlayerID)
 		hub.SetGameLoop(loop)
 		go loop.Run(ctx)
 
